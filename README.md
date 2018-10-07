@@ -1,0 +1,2 @@
+# CrawlDataByPython
+用python语言爬取12306官网上的火车票信息，获取历时最短和票价最低车次信息
