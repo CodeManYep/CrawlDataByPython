@@ -13,12 +13,11 @@ import station
 import time
 import os
 import sys
-import xlwt
 
 
-SearchListFile = "guangzhou.txt"
+SearchListFile = "trainStations.txt"
 SearchBegin = 0
-SearchEnd = 314
+SearchEnd = 2503
 SearchIntervalTime = 6
 
 
@@ -48,9 +47,10 @@ def generateQueryUrl(start, end):
 
     localTime = time.localtime(time.time())
     date = ("%d-%02d-%02d" %(localTime.tm_year, localTime.tm_mon, localTime.tm_mday + 1))
+    print("localTime = ")
     print(localTime)
     print('正在查询 ' + start + '-' + f + ' 至 ' + end + '-' + t + ' 的车次...')
-    url = 'https://kyfw.12306.cn/otn/leftTicket/queryA?leftTicketDTO.train_date=' + '2018-10-18' + '&leftTicketDTO.from_station=' + f + '&leftTicketDTO.to_station=' + t + '&purpose_codes=ADULT'
+    url = 'https://kyfw.12306.cn/otn/leftTicket/queryA?leftTicketDTO.train_date=' + date + '&leftTicketDTO.from_station=' + f + '&leftTicketDTO.to_station=' + t + '&purpose_codes=ADULT'
     return url
 
 #两座城市之间无直达车次 - 接续换乘
@@ -59,10 +59,10 @@ def genLcQueryUrl(start, end):
     toCode = station.stations[end]
     currentTime = time.localtime(time.time())
     date = ("%d-%02d-%02d" %(currentTime.tm_year, currentTime.tm_mon, currentTime.tm_mday + 1))
+    print("currentTime = ")
     print(currentTime)
     print('正在查询 ' + start + '-' + fromCode + ' 至 ' + end + '-' + toCode + ' 的车次...')
-    url = 'https://kyfw.12306.cn/lcquery/query?train_date=' + '2018-10-18' + '&from_station_telecode=' + fromCode + '&to_station_telecode=' + \
-          toCode + '&middle_station=&result_index=0&can_query=Y&isShowWZ=Y&purpose_codes=00&lc_ciphertext=8Q9cL6senUeLKmkcY6Rc4S1j28ckkHdeLt2828TDXEGNi0Rr9VwYk9CvRJ4%3D'
+    url = 'https://kyfw.12306.cn/lcquery/query?train_date=' + date + '&from_station_telecode=' + fromCode + '&to_station_telecode=' + toCode + '&middle_station=&result_index=0&can_query=Y&isShowWZ=Y&purpose_codes=00&lc_ciphertext=qBGbNWFW6jdgQqbDXLQLZOkJg0nXMPcvc5eILBfNOqqxFN0OIVYkvWejJIU%3D'
     return url
     
 def auxGetPriceByTrain(row):
@@ -80,7 +80,7 @@ def auxGetPriceByTrain(row):
     localTime = time.localtime(time.time())
     date = ("%d-%02d-%02d" % (localTime.tm_year, localTime.tm_mon, localTime.tm_mday + 5))
     url_price = "https://kyfw.12306.cn/otn/leftTicket/queryTicketPrice?train_no=" + train_no + "&from_station_no=" + \
-                from_station_no + "&to_station_no=" + to_station_no + "&seat_types=" + seat_types + "&train_date=" + '2018-10-18'
+                from_station_no + "&to_station_no=" + to_station_no + "&seat_types=" + seat_types + "&train_date=" + date
 
     r_price = ""
     try:
@@ -100,41 +100,6 @@ def auxGetPriceByTrain(row):
         price = r_price['data']
     else:
         print("r_price data invalid")
-        return None
-    price = dict(price)
-    minPrice = 0xFFFFFFFF
-    for i in price.keys():
-        if "¥" in price[i]:
-            index = price[i].find("¥")
-            tmpPrice = price[i][index + 1:]
-            tmpPrice = float(tmpPrice)
-            if tmpPrice < minPrice:
-                minPrice = tmpPrice
-    return minPrice
-
-#获取非直达车次中每一个 fullList 中所有车次最低价
-def getMidPrice(train_no, from_station_no, to_station_no, seat_types):
-    url_price = "https://kyfw.12306.cn/otn/leftTicket/queryTicketPrice?train_no=" + train_no + "&from_station_no=" + \
-                from_station_no + "&to_station_no=" + to_station_no + "&seat_types=" + seat_types + "&train_date=" + '2018-10-18'
-
-    r_price = ""
-    try:
-        req = urllib.request.Request(url_price)
-        r_price = urllib.request.urlopen(req).read().decode('utf-8')
-    except :
-        print("get lcprice request Failed")
-        return
-    try:
-        r_price = json.loads(r_price)
-
-    except json.decoder.JSONDecodeError:
-        print(r_price)
-        return
-    price = ""
-    if 'data' in r_price:
-        price = r_price['data']
-    else:
-        print("lcr_price data invalid")
         return None
     price = dict(price)
     minPrice = 0xFFFFFFFF
@@ -179,6 +144,8 @@ def get_price(start, end):
         #print(type(tmpData))
         if 'result' in tmpData:
             rows = tmpData['result']
+            print(type(rows))
+            #print(len(rows))
             
     if len(rows) == 0:
         print("over=====接续换乘=====start")
@@ -208,69 +175,68 @@ def get_price(start, end):
             print("lcrequest status error")
             #print(lcJson)
             return None
-        myIndex = "0"
-        minCost = 0.0 #一次非直达的最小开销
         if "data" in lcJson:
             lcData = lcJson['data']
             print(type(lcData))
             if 'result_index' in lcData:
-                myIndex = lcData['result_index']
-            if 'middleList' in lcData:   
-                #获取 非直达 中返回结果信息 - 用于求 最低成本
-                fullListAndOtr = lcData['middleList'] #fullList 和其它字段
-                count = len(fullListAndOtr)
-                print(count)
-                fullList = ""
-                minPrice = []
-                for i in range(count):
-                    if 'fullList'in fullListAndOtr[i]:
-                        fullList = fullListAndOtr[i]['fullList'] #fullList
-                        midCost = 0.0
-                        #遍历每个 fullList 中有几趟 车次,即需要求几个最小价格的和
-                        for j in range(len(fullList)):
-                            train_no = fullList[j]['train_no'] #train_no
-                            from_station_no = fullList[j]['from_station_no'] #from_station_no
-                            to_station_no = fullList[j]['to_station_no'] #to_station_no
-                            seat_types = fullList[j]['seat_types'] #seat_types
-                            #获取每一个 fullList 的最小成本，即最小价格
-                            midCost = midCost + getMidPrice(train_no, from_station_no, to_station_no, seat_types)
-                        #每次完成一次非直达将最小值之和放入列表中
-                        minPrice.append(midCost)
-                        #print(midCost)
-                #获取midCost中的最小值
-                minCost = min(minPrice)
-                #print(minCost)                            
-                
-        result = (start, end, myIndex, minCost)
+                index = lcData['result_index']
+            if 'middleList' in lcData:
+                #只取第一个，12306官网默认按时间降序排序 - 取 历时最短
+                cols = lcData['middleList'][0]['all_lishi']#middleList
+                #print(type(cols))
+                print(cols)
+        result = (start, end, 0, 0, 0, cols, index, 0)
         print(result)
-        if len(result) == 0:
+        if len(cols) == 0:
             print("over=====totally=====")
             return None
-        
     if len(rows) != 0:
+        trains= PrettyTable()
+        #header = '车次 车站 时间 历时 商务座/价格 特等座/价格  一等座/价格  二等座/价格  高级软卧/价格  软卧/价格   硬卧/价格  软座/价格  硬座/价格  无座/价格 '.split()
+        trains.field_names=["车次","车站","时间","历时","商务座/价格","特等座/价格","一等座/价格","二等座/价格","高级软卧/价格","软卧/价格","硬卧/价格 ","软座/价格 ","硬座/价格","无座/价格"]
+        trains.align["车次"] = "l"
+        trains.padding_width = 2
         num = len(rows)
-        zdminPrice = [] #直达每趟车次最低价格列表
-        zdminCost = 0.0 #直达中的最低价格
-        #遍历所有车次
+        minTime = "99:99"
+        minTimeIndex = -1
+        validCount = 0
         for i in range(num):
-            #获取每个车次的最低价格
-            price = auxGetPriceByTrain(rows[i])
             tmpList = rows[i].split("|")
-            if price is None:
-                print("trainName = %s, costTime = %s, Get Price Failed" %(tmpList[3], tmpList[10]))
-                return None
-            #print("price = %f" % price)
-            zdminPrice.append(price)
-        print(zdminPrice)        
-        zdminCost = min(zdminPrice)
-        result = (start, end, num, zdminCost)
-        #print(result)
+            if tmpList is None:
+                continue
+            if len(tmpList) < 36:
+                continue
+            if "99:59" == tmpList[10]:
+                validCount = validCount + 1
+            #print("trainName = %s, beginTime = %s, endTime = %s, costTime = %s" %(tmpList[3], tmpList[8], tmpList[9], tmpList[10]))
+            if tmpList[10] < minTime:
+                minTime = tmpList[10]
+                minTimeIndex = i
+        if minTimeIndex == -1:
+            print("get min cost Time Failed, num = %u" %(num))
+            return None
+        
+        validCount = num - validCount
+        if validCount < 1:
+            print("no valid Train")
+            return None
+        row = rows[minTimeIndex]
+        price = auxGetPriceByTrain(row)
+
+        tmpList = row.split("|")
+        if price is None:
+            print("trainName = %s, costTime = %s, Get Price Failed" %(tmpList[3], tmpList[10]))
+            return None
+        print("price = %f" % price)
+        if minTimeIndex != -1:
+            result = (start, end, tmpList[3], tmpList[8], tmpList[9], tmpList[10], str(validCount), price)
+        print(result)
         #print(trains)
     return result
 
-#写入excel表格
-def writeToExcel():
-    xlsx = "G:\\Python\\Location\\Pratise\\Train\\TrainData.xlsx"
+def getCityTrainPrice():
+    #cityList = getCityList("config.txt")
+    #length = len(cityList)
 
     global SearchBegin
     global SearchEnd
@@ -294,9 +260,6 @@ def writeToExcel():
         print("open log File Failed")
         return None
 
-    trainInfo = xlwt.Workbook(encoding='utf-8') #创建一个excel
-    minCost = trainInfo.add_sheet("minTime", cell_overwrite_ok=True) #创建名为 minTime 的sheet
-    j = 0
     for i in searchList:
         if ',' not in i:
             continue
@@ -304,30 +267,12 @@ def writeToExcel():
         time.sleep(SearchIntervalTime)
         tmpResult = get_price(tmpList[0], tmpList[1])
         writeStr = ""
-        #for j in range(length):
         if tmpResult is None:
-            minTime.write(j, 0, tmpList[0])
-            minTime.write(j, 1, tmpList[1])
-            minTime.write(j, 2, '接续换乘')
-            minTime.write(j, 3, 'NULL')
-            minTime.write(j, 4, 'NULL')
-            minTime.write(j, 5, 'NULL')
-            minTime.write(j, 6, 'NULL')
-            minTime.write(j, 7, 'NULL')
             writeStr = "%s,%s,NULL\n" %(tmpList[0], tmpList[1])
-            fp.write(writeStr)
         else:
-            minTime.write(j, 0, tmpResult[0])
-            minTime.write(j, 1, tmpResult[1])
-            minTime.write(j, 2, tmpResult[2])
-            minTime.write(j, 3, tmpResult[3])
-            minTime.write(j, 4, tmpResult[4])
-            minTime.write(j, 5, tmpResult[5])
-            minTime.write(j, 6, tmpResult[6])
-            minTime.write(j, 7, tmpResult[7])
-        j = j + 1
-    trainInfo.save(xlsx)
-    print("saveFile = %s" % xlsx)
+            writeStr = "%s,%s,%s,%s,%s,%s,%s,%f\n" %(tmpResult[0], tmpResult[1], tmpResult[2], tmpResult[3], tmpResult[4], tmpResult[5], tmpResult[6], tmpResult[7])
+        fp.write(writeStr)
+
     fp.close()
     return True
 
@@ -386,13 +331,13 @@ def getSearchList(searchListFile, start, end):
 if __name__ == "__main__":
     #getValidSearch()
     #generateSearchList("config.txt")
-    writeToExcel()
+    getCityTrainPrice()
+
     #url = generateQueryUrl("武汉", "北京")
     #url = generateQueryUrl("北京", "额济纳")
     #print(url)
-    result = get_price("北京", "固原")
-    #result = get_price("北京", "西安")
+    #result = get_price("北京", "固原")
+    #result = get_price("北京", "额济纳")
     #print(result)
     #lcUrl = genLcQueryUrl("北京","固原")
     #print(lcUrl)
-
