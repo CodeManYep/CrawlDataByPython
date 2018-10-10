@@ -332,12 +332,11 @@ if __name__ == "__main__":
     #getValidSearch()
     #generateSearchList("config.txt")
     getCityTrainPrice()
-
     #url = generateQueryUrl("武汉", "北京")
     #url = generateQueryUrl("北京", "额济纳")
     #print(url)
     #result = get_price("北京", "固原")
-    #result = get_price("北京", "额济纳")
+   
     #print(result)
     #lcUrl = genLcQueryUrl("北京","固原")
     #print(lcUrl)
